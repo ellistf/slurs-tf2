@@ -4,7 +4,7 @@
 
 The original site got shutdown with its source code never being made public, and so I decided to make my own version!
 
-This rebuild is usually slower than the original site because it scans logs live on demand instead of reading from a pre-populated backend database. That tradeoff is intentional: this version stays simple, stateless, and easy to self-host.
+This rebuild is usually slower than the original site because it scans logs live on demand instead of reading from a pre-populated backend database.
 
 ## What It Does
 
