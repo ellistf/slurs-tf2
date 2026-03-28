@@ -1,3 +1,5 @@
+![Slurs.tf2 banner](public/re-logo.png)
+
 # Slurs-TF2
 
 `Slurs-TF2` is a from-scratch replacement for the old [slurs.tf](https://slurs.tf/) player lookup site.
