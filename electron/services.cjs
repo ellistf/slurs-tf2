@@ -1,6 +1,6 @@
 const { app } = require('electron');
 const { readFileSync, writeFileSync, mkdirSync } = require('node:fs');
-const { dirname, join } = require('node:path');
+const { dirname, join, parse } = require('node:path');
 
 const FLAG_CODE_MAP = {
   argentina: 'ar',
@@ -60,6 +60,18 @@ const REGION_NAMES = new Intl.DisplayNames(['en'], { type: 'region' });
 function getSettingsFilePath() {
   if (process.env.ELECTRON_SETTINGS_FILE?.trim()) {
     return process.env.ELECTRON_SETTINGS_FILE.trim();
+  }
+
+  if (process.env.PORTABLE_EXECUTABLE_DIR?.trim()) {
+    const portableBaseName = parse(
+      process.env.PORTABLE_EXECUTABLE_APP_FILENAME?.trim() || 'Slurs.tf2.exe'
+    ).name;
+
+    return join(
+      process.env.PORTABLE_EXECUTABLE_DIR.trim(),
+      `${portableBaseName}-data`,
+      'settings.json'
+    );
   }
 
   try {
