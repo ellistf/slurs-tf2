@@ -57,6 +57,14 @@ input {
   padding: 60px 16px 0;
 }
 
+.home-actions {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 24px;
+}
+
 .logo-wrap {
   width: 100%;
   max-width: 420px;
@@ -124,6 +132,65 @@ input {
   color: #c44;
 }
 
+.electron-settings-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid #3d3d3d;
+  color: #b8b8b8;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.electron-settings-button:hover {
+  border-color: #4a90d9;
+  color: #d7e7fa;
+}
+
+.electron-settings-button:focus-visible {
+  outline: 1px solid #4a90d9;
+  outline-offset: 2px;
+}
+
+.electron-settings-form {
+  margin-top: 16px;
+}
+
+.electron-settings-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #d0d0d0;
+  font-size: 0.85rem;
+}
+
+.electron-settings-input {
+  width: 100%;
+  background: #111;
+  border: 1px solid #323232;
+  color: #fff;
+  padding: 10px 12px;
+  outline: none;
+}
+
+.electron-settings-input:focus {
+  border-color: #4a90d9;
+}
+
+.electron-settings-feedback {
+  min-height: 18px;
+  margin-top: 10px;
+  color: #8d8d8d;
+  font-size: 0.8rem;
+}
+
+.electron-settings-feedback-error {
+  color: #c44;
+}
+
 .player-page {
   max-width: 900px;
   margin: 0 auto;
@@ -141,14 +208,24 @@ input {
 }
 
 .player-home-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: #9bbce2;
-  font-size: 0.82rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #3d3d3d;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
 
 .player-home-link:hover {
-  text-decoration: underline;
+  border-color: #4a90d9;
+  color: #d7e7fa;
+}
+
+.player-home-link:focus-visible {
+  outline: 1px solid #4a90d9;
+  outline-offset: 2px;
 }
 
 .player-header-card {
@@ -168,6 +245,13 @@ input {
   background: #111;
   border: 1px solid #2f2f2f;
   flex-shrink: 0;
+}
+
+.player-avatar-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .player-avatar-fallback {
@@ -510,6 +594,11 @@ input {
   color: #b0b0b0;
   font-size: 0.9rem;
   line-height: 1.5;
+}
+
+.confirm-modal p a {
+  color: #9bbce2;
+  text-decoration: underline;
 }
 
 .confirm-modal-actions {

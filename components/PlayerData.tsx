@@ -43,30 +43,34 @@ function sleep(ms: number) {
 async function fetchRouteJson<T>(url: string, retries: number, timeoutMs = 20000): Promise<T> {
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
-      const response = await fetch(url, {
-        cache: 'no-store',
-        signal: AbortSignal.timeout(timeoutMs)
-      });
-
-      if (response.ok) {
-        return (await response.json()) as T;
+      if (!url.startsWith('electron://')) {
+        throw new Error('Unsupported renderer request.');
       }
 
-      let message = 'Request failed.';
-
-      try {
-        const payload = (await response.json()) as { error?: string };
-        message = payload.error || message;
-      } catch {
-        message = `Request failed with status ${response.status}`;
+      if (!window.slursApi) {
+        throw new Error('Electron API bridge is unavailable.');
       }
 
-      if (attempt < retries && [408, 429, 500, 502, 503, 504].includes(response.status)) {
-        await sleep(300 * (attempt + 1));
-        continue;
+      if (timeoutMs) {
+        void AbortSignal.timeout(timeoutMs);
       }
 
-      throw new Error(message);
+      const action = url.slice('electron://'.length);
+
+      if (action.startsWith('logs?')) {
+        const searchParams = new URLSearchParams(action.slice('logs?'.length));
+        const steamId = searchParams.get('steamid') ?? '';
+        const offset = Number(searchParams.get('offset') ?? '0');
+
+        return (await window.slursApi.getLogs(steamId, offset)) as T;
+      }
+
+      if (action.startsWith('log?id=')) {
+        const logId = Number(action.slice('log?id='.length));
+        return (await window.slursApi.getLog(logId)) as T;
+      }
+
+      throw new Error('Unsupported renderer request.');
     } catch (error) {
       if (attempt < retries) {
         await sleep(300 * (attempt + 1));
@@ -433,7 +437,7 @@ export function PlayerData({ steamId }: { steamId: string }) {
   }, [filteredMessages.length, hasMoreVisibleMessages, isComplete]);
 
   async function fetchLogsPage(offset: number) {
-    return fetchRouteJson<LogsListResponse>(`/api/logs?steamid=${steamId}&offset=${offset}`, PAGE_RETRIES);
+    return fetchRouteJson<LogsListResponse>(`electron://logs?steamid=${steamId}&offset=${offset}`, PAGE_RETRIES);
   }
 
   async function listAllLogs(token: number) {
@@ -491,7 +495,7 @@ export function PlayerData({ steamId }: { steamId: string }) {
 
     await runConcurrent(logs, LOG_CONCURRENCY, async (log) => {
       try {
-        const payload = await fetchRouteJson<LogDetailResponse>(`/api/log?id=${log.id}`, retries);
+        const payload = await fetchRouteJson<LogDetailResponse>(`electron://log?id=${log.id}`, retries);
 
         if (activeToken.current !== token) {
           return;

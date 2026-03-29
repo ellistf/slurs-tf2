@@ -17,6 +17,7 @@ This rebuild is usually slower than the original site because it scans logs live
 - Categorizes flagged messages with fuzzy matching for obfuscation and misspellings
 - Tracks class usage from logs and shows the most-played class image
 - Caches the last 10 completed player scans in the browser for faster revisits
+- Runs as an Electron desktop app backed by a Vite + React renderer
 
 ## Data Sources
 
@@ -27,11 +28,12 @@ This rebuild is usually slower than the original site because it scans logs live
 
 ## Stack
 
-- Next.js 14 App Router
+- Electron
+- Vite
+- React
 - TypeScript
 - Tailwind CSS
 - Vitest + Testing Library
-- `sharp` for production image optimization
 
 ## Local Setup
 
@@ -43,7 +45,7 @@ npm install
 
 ### 2. Configure environment variables
 
-Create `.env.local` or populate `.env` with:
+Populate `.env` with:
 
 ```bash
 STEAM_API_KEY=your_steam_web_api_key_here
@@ -59,9 +61,7 @@ Steam keys can be created at:
 npm run dev
 ```
 
-Open:
-
-`http://localhost:3000`
+That starts the Vite renderer on `http://127.0.0.1:51425` and opens the Electron shell.
 
 ## Steam Key Behavior
 
@@ -83,53 +83,37 @@ npm run build
 npm run start
 ```
 
-## Local Public Tunnel
+## Electron Desktop App
 
-If you want to expose the local production build through Cloudflared:
-
-```bash
-npm run startp
-```
-
-That command:
-
-- ensures a production build exists
-- starts `next start`
-- waits for the local port to be ready
-- opens a Cloudflared tunnel to the local app
-
-Optional environment variables:
-
-- `PORT`
-- `STARTP_HOST`
-- `CLOUDFLARED_BIN`
-- `STARTP_SKIP_BUILD=1`
-
-This requires `cloudflared` to already be installed on the local machine.
-
-## Vercel Deployment
-
-### 1. Build locally first if you want to sanity check
+Run the desktop wrapper in development:
 
 ```bash
-npm run build
+npm run electron:dev
 ```
 
-### 2. Deploy
+Run the desktop wrapper against a production build:
 
 ```bash
-npx vercel --prod
+npm run electron:start
 ```
 
-### 3. Add environment variables in Vercel
-
-Set:
+Build a portable Windows `.exe`:
 
 ```bash
-STEAM_API_KEY=your_steam_web_api_key_here
+npm run electron:portable
 ```
 
-If you do not set the key, the app will still work for direct `SteamID64` lookups, but vanity URL resolution will remain disabled.
+The portable build is written to `release/`.
+
+The Electron launcher:
+
+- starts the Vite renderer in development
+- loads the built `dist/` files in production
+- opens the app in an Electron window
+- defaults to local port `51425`
+- creates a local `.electron-app.lock` file so a second desktop launch will fail cleanly instead of opening another wrapper
+- automatically clears stale lock files if the previous launcher process is no longer running
+- stores Electron-specific settings, including the Steam API key, outside the repo through the in-app Settings button on the home page
 
 ## Testing
 
@@ -140,13 +124,12 @@ npm test
 ## Project Structure
 
 ```text
-app/
-  api/
-  player/[steamid]/
 components/
+electron/
 lib/
 public/
 scripts/
+src/
 tests/
 types/
 ```

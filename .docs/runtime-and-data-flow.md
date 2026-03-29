@@ -5,30 +5,30 @@
 ### Home search
 
 1. The user enters either a `SteamID64`, vanity name, or a pasted Steam profile URL.
-2. If the app has a Steam key and the input is a vanity name, the browser calls `/api/resolve`.
-3. The app navigates to `/player/[steamid]`.
+2. If the app has a Steam key and the input is a vanity name, the renderer calls `window.slursApi.resolveVanity(...)`.
+3. React Router navigates to `/player/:steamid`.
 
 If no Steam key exists, the home page is intentionally restricted to numeric `SteamID64` input.
 
 ## Player page flow
 
-### Server render phase
+### Route shell phase
 
-`app/player/[steamid]/page.tsx`:
+`src/pages/PlayerRoute.tsx`:
 
 1. validates the route parameter
-2. fetches the profile summary
+2. fetches the profile summary through the preload bridge
 3. renders the page shell and header
 4. mounts `PlayerData`
 
-### Client scan phase
+### Scan phase
 
 `components/PlayerData.tsx` then:
 
 1. checks the browser cache for a completed scan
 2. if cached, restores it instantly
-3. otherwise requests `/api/logs` until the full log list is collected
-4. requests individual log details with fixed concurrency
+3. otherwise requests log pages through `window.slursApi.getLogs(...)` until the full log list is collected
+4. requests individual log details through `window.slursApi.getLog(...)` with fixed concurrency
 5. extracts only the target player's messages
 6. analyzes every message with `analyzeMessage`
 7. derives class totals from per-log player data
@@ -54,9 +54,9 @@ The UI uses those phases to show the progress label and progress bar.
 
 There are two retry layers:
 
-### Server-side fetch helper retries
+### Electron service retries
 
-`lib/http.ts` retries transient upstream failures such as:
+`electron/services.cjs` retries transient upstream failures such as:
 
 - `429`
 - `500`
@@ -65,12 +65,12 @@ There are two retry layers:
 - `504`
 - network timeouts
 
-### Client-side scan retries
+### Renderer scan retries
 
-`PlayerData` also retries calls to:
+`PlayerData` also retries preload-backed calls to:
 
-- `/api/logs`
-- `/api/log`
+- `getLogs`
+- `getLog`
 
 After the first scan pass, any log details that still failed are retried in one more pass. Successful results remain intact even if some logs never recover.
 
@@ -124,18 +124,17 @@ The returned match ranges are then used by `MessageTable` to highlight exact off
 
 `npm run startp`:
 
-- starts the production app
-- waits for the port to open
+- ensures a production build exists
+- starts `vite preview`
+- waits for the local port to open
 - launches a Cloudflared quick tunnel
 
 This is meant for local sharing and smoke testing, not as a replacement for a real production deployment.
 
-### Vercel
+### Electron settings
 
-The app deploys cleanly to Vercel because it does not depend on any external stateful infrastructure.
+The Electron build can store the Steam API key outside the repo:
 
-The only required secret is:
-
-- `STEAM_API_KEY`
-
-Without it, the deployed app still works for direct `SteamID64` lookups.
+- the Settings button writes a small JSON settings file under the user profile
+- Electron services read that file as a fallback when `.env` does not provide `STEAM_API_KEY`
+- this allows desktop users to configure vanity lookups without editing env files

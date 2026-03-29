@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 
 import { extractSteamIdInput, extractVanityInput } from '@/lib/validation';
 
@@ -18,7 +18,7 @@ export function SearchBar({
   initialValue = '',
   vanityLookupEnabled = true
 }: SearchBarProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [value, setValue] = useState(initialValue);
   const [error, setError] = useState<string | null>(null);
   const [isResolving, setIsResolving] = useState(false);
@@ -40,7 +40,7 @@ export function SearchBar({
 
     if (/^\d{17}$/.test(input) || profileSteamId) {
       startTransition(() => {
-        router.push(`/player/${profileSteamId ?? input}`);
+        navigate(`/player/${profileSteamId ?? input}`);
       });
       return;
     }
@@ -54,19 +54,18 @@ export function SearchBar({
     const vanity = extractVanityInput(input);
 
     try {
-      const response = await fetch(`/api/resolve?vanity=${encodeURIComponent(vanity)}`, {
-        cache: 'no-store'
-      });
-
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(payload.error || 'Could not resolve that name');
+      if (!window.slursApi) {
+        throw new Error('Electron API bridge is unavailable.');
       }
 
-      const payload = (await response.json()) as { steamid: string };
+      const steamid = await window.slursApi.resolveVanity(vanity);
+
+      if (!steamid) {
+        throw new Error('Could not resolve that name');
+      }
 
       startTransition(() => {
-        router.push(`/player/${payload.steamid}`);
+        navigate(`/player/${steamid}`);
       });
     } catch (error) {
       setIsResolving(false);

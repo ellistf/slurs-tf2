@@ -1,6 +1,4 @@
-import Link from 'next/link';
-import Image from 'next/image';
-
+import { House } from 'lucide-react';
 import type { PlayerProfile } from '@/types';
 
 export function PlayerHeader({
@@ -17,15 +15,15 @@ export function PlayerHeader({
   return (
     <section className="player-header">
       <div className="player-header-top">
-        <Link href="/" className="player-home-link">
-          Return home
-        </Link>
+        <a href="#/" className="player-home-link" aria-label="Return home" title="Return home">
+          <House size={18} strokeWidth={1.9} aria-hidden="true" />
+        </a>
       </div>
 
       <div className="player-header-card">
         <div className="player-avatar">
           {profile?.avatarUrl ? (
-            <Image src={profile.avatarUrl} alt={name} fill sizes="80px" className="object-cover" />
+            <img src={profile.avatarUrl} alt={name} className="player-avatar-image" />
           ) : (
             <div className="player-avatar-fallback">?</div>
           )}

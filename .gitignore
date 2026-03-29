@@ -8,6 +8,7 @@ out/
 # General build artifacts
 dist/
 build/
+release/
 coverage/
 *.tsbuildinfo
 
@@ -29,6 +30,7 @@ pnpm-debug.log*
 .env.production.local
 .env*.local
 !.env.example
+.electron-app.lock
 
 # OS / editor files
 .DS_Store

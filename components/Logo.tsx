@@ -1,5 +1,4 @@
-import Image from 'next/image';
-import Link from 'next/link';
+import { getAssetPath } from '@/lib/asset-path';
 
 export function Logo({
   linked = true,
@@ -11,12 +10,9 @@ export function Logo({
   const content = (
     <div className={className}>
       <div className="logo-wrap">
-        <Image
-          src="/re-logo.png"
+        <img
+          src={getAssetPath('re-logo.png')}
           alt="Slurs.tf2"
-          width={420}
-          height={136}
-          priority
           className="logo-img"
         />
       </div>
@@ -29,8 +25,8 @@ export function Logo({
   }
 
   return (
-    <Link href="/" aria-label="Go to home">
+    <a href="#/" aria-label="Go to home">
       {content}
-    </Link>
+    </a>
   );
 }

@@ -3,15 +3,7 @@ import userEvent from '@testing-library/user-event';
 
 import { PlayerData } from '@/components/PlayerData';
 import { clearPlayerCache } from '@/lib/player-cache';
-
-function jsonResponse(payload: unknown, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  });
-}
+import type { LogDetailResponse, LogsListResponse } from '@/types';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -24,141 +16,156 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+function installSlursApiMock(overrides?: {
+  getLogs?: (steamId: string, offset: number) => Promise<LogsListResponse>;
+  getLog?: (logId: number) => Promise<LogDetailResponse>;
+}) {
+  const api = {
+    getRuntimeInfo: vi.fn().mockResolvedValue({
+      isElectronApp: true,
+      steamApiKeyConfigured: true
+    }),
+    getElectronSettings: vi.fn().mockResolvedValue({
+      steamApiKeyConfigured: true
+    }),
+    saveElectronSettings: vi.fn().mockResolvedValue({
+      steamApiKeyConfigured: true
+    }),
+    resolveVanity: vi.fn().mockResolvedValue(null),
+    getProfile: vi.fn().mockResolvedValue(null),
+    getLogs:
+      vi.fn(overrides?.getLogs ?? (() => Promise.reject(new Error('getLogs mock not configured')))),
+    getLog:
+      vi.fn(overrides?.getLog ?? (() => Promise.reject(new Error('getLog mock not configured'))))
+  };
+
+  Object.defineProperty(window, 'slursApi', {
+    value: api,
+    configurable: true,
+    writable: true
+  });
+
+  return api;
+}
+
 describe('PlayerData', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     clearPlayerCache();
+    delete window.slursApi;
   });
 
   it('waits for the full scan before rendering rows, then filters locally with bold matches', async () => {
-    const log1 = deferred<Response>();
-    const log2 = deferred<Response>();
+    const log1 = deferred<LogDetailResponse>();
+    const log2 = deferred<LogDetailResponse>();
 
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
+    const api = installSlursApiMock({
+      getLogs: async () => ({
+        success: true,
+        results: 2,
+        total: 2,
+        logs: [
+          { id: 101, title: 'Log 101', date: 100 },
+          { id: 102, title: 'Log 102', date: 200 }
+        ]
+      }),
+      getLog: (logId) => {
+        if (logId === 101) {
+          return log1.promise;
+        }
 
-      if (url.includes('/api/logs?steamid=76561197960265729&offset=0')) {
-        return Promise.resolve(
-          jsonResponse({
-            success: true,
-            results: 2,
-            total: 2,
-            logs: [
-              { id: 101, title: 'Log 101', date: 100 },
-              { id: 102, title: 'Log 102', date: 200 }
-            ]
-          })
-        );
+        if (logId === 102) {
+          return log2.promise;
+        }
+
+        return Promise.reject(new Error(`Unexpected log id: ${logId}`));
       }
-
-      if (url.includes('/api/log?id=101')) {
-        return log1.promise;
-      }
-
-      if (url.includes('/api/log?id=102')) {
-        return log2.promise;
-      }
-
-      throw new Error(`Unexpected fetch: ${url}`);
     });
-
-    vi.stubGlobal('fetch', fetchMock);
 
     render(<PlayerData steamId="76561197960265729" />);
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/api/logs?steamid=76561197960265729&offset=0',
-        expect.objectContaining({ cache: 'no-store' })
-      );
+      expect(api.getLogs).toHaveBeenCalledWith('76561197960265729', 0);
     });
 
     act(() => {
-      log1.resolve(
-        jsonResponse({
-          success: true,
-          chat: [{ steamid: '[U:1:1]', msg: 'n1.gg3r' }],
-          players: {
-            '[U:1:1]': {
-              class_stats: [{ type: 'scout', total_time: 30 }]
-            }
+      log1.resolve({
+        success: true,
+        chat: [{ steamid: '[U:1:1]', msg: 'n1.gg3r' }],
+        players: {
+          '[U:1:1]': {
+            class_stats: [{ type: 'scout', total_time: 30 }]
           }
-        })
-      );
+        }
+      });
     });
 
     await waitFor(() => expect(screen.getByTestId('racial-count')).toHaveTextContent('1'));
     expect(screen.queryByText('n1.gg3r')).not.toBeInTheDocument();
 
     act(() => {
-      log2.resolve(
-        jsonResponse({
-          success: true,
-          chat: [{ steamid: '[U:1:1]', msg: 'hello there' }],
-          players: {
-            '[U:1:1]': {
-              class_stats: [{ type: 'pyro', total_time: 40 }]
-            }
+      log2.resolve({
+        success: true,
+        chat: [{ steamid: '[U:1:1]', msg: 'hello there' }],
+        players: {
+          '[U:1:1]': {
+            class_stats: [{ type: 'pyro', total_time: 40 }]
           }
-        })
-      );
+        }
+      });
     });
 
     await waitFor(() => expect(screen.getByText('hello there')).toBeInTheDocument());
     expect(screen.getByText('n1.gg3r', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByTestId('top-class')).toHaveTextContent('pyro');
 
-    const fetchCountBeforeFilter = fetchMock.mock.calls.length;
+    const logCallsBeforeFilter = api.getLog.mock.calls.length;
+    const logsCallsBeforeFilter = api.getLogs.mock.calls.length;
+
     await userEvent.click(screen.getByRole('button', { name: 'Flagged only' }));
-    expect(fetchMock.mock.calls.length).toBe(fetchCountBeforeFilter);
+    expect(api.getLog.mock.calls.length).toBe(logCallsBeforeFilter);
+    expect(api.getLogs.mock.calls.length).toBe(logsCallsBeforeFilter);
     expect(screen.getByText('n1.gg3r', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.queryByText('hello there')).not.toBeInTheDocument();
 
     await userEvent.type(screen.getByRole('textbox', { name: 'Search messages' }), 'n1.');
-    expect(fetchMock.mock.calls.length).toBe(fetchCountBeforeFilter);
+    expect(api.getLog.mock.calls.length).toBe(logCallsBeforeFilter);
+    expect(api.getLogs.mock.calls.length).toBe(logsCallsBeforeFilter);
     expect(screen.getByText('n1.gg3r', { selector: 'strong' })).toBeInTheDocument();
   });
 
   it('restores the previous full scan from the client cache without refetching', async () => {
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
+    const api = installSlursApiMock({
+      getLogs: async () => ({
+        success: true,
+        results: 1,
+        total: 1,
+        logs: [{ id: 301, title: 'Log 301', date: 100 }]
+      }),
+      getLog: async (logId) => {
+        if (logId !== 301) {
+          throw new Error(`Unexpected log id: ${logId}`);
+        }
 
-      if (url.includes('/api/logs?steamid=76561197960265729&offset=0')) {
-        return Promise.resolve(
-          jsonResponse({
-            success: true,
-            results: 1,
-            total: 1,
-            logs: [{ id: 301, title: 'Log 301', date: 100 }]
-          })
-        );
-      }
-
-      if (url.includes('/api/log?id=301')) {
-        return Promise.resolve(
-          jsonResponse({
-            success: true,
-            chat: [{ steamid: '[U:1:1]', msg: 'faggot' }],
-            players: {
-              '[U:1:1]': {
-                class_stats: [{ type: 'medic', total_time: 20 }]
-              }
+        return {
+          success: true,
+          chat: [{ steamid: '[U:1:1]', msg: 'faggot' }],
+          players: {
+            '[U:1:1]': {
+              class_stats: [{ type: 'medic', total_time: 20 }]
             }
-          })
-        );
+          }
+        };
       }
-
-      throw new Error(`Unexpected fetch: ${url}`);
     });
-
-    vi.stubGlobal('fetch', fetchMock);
 
     const firstRender = render(<PlayerData steamId="76561197960265729" />);
     await waitFor(() => expect(screen.getByText('faggot', { selector: 'strong' })).toBeInTheDocument());
     firstRender.unmount();
 
-    fetchMock.mockClear();
+    api.getLogs.mockClear();
+    api.getLog.mockClear();
 
     render(<PlayerData steamId="76561197960265729" />);
 
@@ -166,7 +173,9 @@ describe('PlayerData', () => {
       expect(screen.getByText('Saved results loaded.')).toBeInTheDocument()
     );
     expect(screen.getByText('faggot', { selector: 'strong' })).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(api.getLogs).not.toHaveBeenCalled();
+    expect(api.getLog).not.toHaveBeenCalled();
+
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 3600));
     });
@@ -177,35 +186,23 @@ describe('PlayerData', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Refresh now' }));
 
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/api/logs?steamid=76561197960265729&offset=0',
-        expect.objectContaining({ cache: 'no-store' })
-      )
-    );
+    await waitFor(() => expect(api.getLogs).toHaveBeenCalledWith('76561197960265729', 0));
   }, 10000);
 
   it('keeps successful results when one log detail request still fails after retries', async () => {
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
-
-      if (url.includes('/api/logs?steamid=76561197960265729&offset=0')) {
-        return Promise.resolve(
-          jsonResponse({
-            success: true,
-            results: 2,
-            total: 2,
-            logs: [
-              { id: 201, title: 'Log 201', date: 100 },
-              { id: 202, title: 'Log 202', date: 200 }
-            ]
-          })
-        );
-      }
-
-      if (url.includes('/api/log?id=201')) {
-        return Promise.resolve(
-          jsonResponse({
+    const api = installSlursApiMock({
+      getLogs: async () => ({
+        success: true,
+        results: 2,
+        total: 2,
+        logs: [
+          { id: 201, title: 'Log 201', date: 100 },
+          { id: 202, title: 'Log 202', date: 200 }
+        ]
+      }),
+      getLog: async (logId) => {
+        if (logId === 201) {
+          return {
             success: true,
             chat: [{ steamid: '[U:1:1]', msg: 'faggot' }],
             players: {
@@ -213,18 +210,16 @@ describe('PlayerData', () => {
                 class_stats: [{ type: 'medic', total_time: 20 }]
               }
             }
-          })
-        );
-      }
+          };
+        }
 
-      if (url.includes('/api/log?id=202')) {
-        return Promise.resolve(new Response(JSON.stringify({ error: 'bad gateway' }), { status: 502 }));
-      }
+        if (logId === 202) {
+          throw new Error('bad gateway');
+        }
 
-      throw new Error(`Unexpected fetch: ${url}`);
+        throw new Error(`Unexpected log id: ${logId}`);
+      }
     });
-
-    vi.stubGlobal('fetch', fetchMock);
 
     render(<PlayerData steamId="76561197960265729" />);
 
@@ -234,5 +229,6 @@ describe('PlayerData', () => {
     );
     expect(screen.getByText('faggot', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByTestId('bigotry-count')).toHaveTextContent('1');
+    expect(api.getLog.mock.calls.filter(([logId]) => logId === 202)).toHaveLength(9);
   });
 });

@@ -2,65 +2,66 @@
 
 ## Overview
 
-The app is a Next.js 14 App Router project with a split between:
+The app now runs as an Electron desktop app with a Vite + React renderer.
 
-- server-only upstream helpers in `lib/`
-- thin API proxy routes in `app/api/`
-- server-rendered page shell in `app/player/[steamid]/page.tsx`
+The main split is:
+
+- Electron main/preload code in `electron/`
+- shared upstream helpers in `lib/`
+- React route shells in `src/pages/`
 - client-side scan and presentation logic in `components/PlayerData.tsx`
 
-The design goal is to stay stateless on the server. The app does not store scan results in a database. Completed scans are only cached in the browser.
+The design goal is still to stay stateless. The app does not store scan results in a database. Completed scans are only cached in the browser.
 
 ## Main Pieces
 
-### `app/page.tsx`
+### `src/pages/HomeRoute.tsx`
 
-Home page. Renders the logo and search bar. It also decides whether vanity lookup is enabled by checking for `STEAM_API_KEY`.
+Home route for the renderer. It loads Electron runtime info and renders the logo, search bar, and desktop-only settings button.
 
-### `app/player/[steamid]/page.tsx`
+### `src/pages/PlayerRoute.tsx`
 
-Server component for the player route.
+Client-side player route shell.
 
 Responsibilities:
 
 - validate the route param as a `SteamID64`
-- fetch profile data server-side
+- fetch the player profile through the preload bridge
 - render the player header immediately
-- hand the actual scan work off to `PlayerData`
+- hand the scan work off to `PlayerData`
 
-This route is marked `force-dynamic` because the content depends on live upstream requests.
+### `electron/main.cjs`
 
-### `app/api/*`
-
-Thin proxy endpoints used by the browser:
-
-- `/api/resolve`
-- `/api/profile`
-- `/api/logs`
-- `/api/log`
-
-These keep Steam keys off the client and give the frontend a consistent same-origin API surface.
-
-### `lib/steam.ts`
-
-Server-only Steam logic.
+Electron desktop entry point.
 
 Responsibilities:
 
-- check whether `STEAM_API_KEY` exists
+- create the browser window
+- load the Vite dev server or built renderer
+- register IPC handlers
+- expose the desktop icon, settings path, and other desktop-only behavior
+
+### `electron/preload.cjs`
+
+The safe bridge between the renderer and Electron.
+
+Responsibilities:
+
+- expose `window.slursApi`
+- keep Node/Electron APIs out of the React renderer
+- route requests through IPC
+
+### `electron/services.cjs`
+
+Shared service layer behind the IPC handlers.
+
+Responsibilities:
+
 - resolve vanity URLs
-- fetch Steam player summaries
-- fall back to ETF2L profile data when no Steam key is available
-
-### `lib/league.ts`
-
-ETF2L integration and region handling.
-
-Responsibilities:
-
-- load ETF2L player data
-- prefer league country/region over Steam country when available
-- map region names to FlagCDN-compatible flag codes
+- fetch player summaries
+- prefer ETF2L region/profile data when Steam data is missing or less accurate
+- read/write Electron settings
+- fetch logs.tf list/detail payloads
 
 ### `lib/logstf.ts`
 
@@ -87,11 +88,11 @@ Message analysis lives here.
 
 ### `components/PlayerData.tsx`
 
-This is the main runtime engine on the client.
+This is the main runtime engine in the renderer.
 
 Responsibilities:
 
-- fetch all log pages for the player
+- fetch all log pages for the player through `window.slursApi`
 - scan all log details with concurrency limits
 - retry failed log requests
 - accumulate stats and class totals
@@ -112,17 +113,17 @@ Behavior:
 
 ## Why The Split Matters
 
-The app keeps server code and browser code intentionally separate:
+The app keeps desktop/runtime code and renderer code intentionally separate:
 
-- server components can call helpers directly
-- client components only call the app's own API routes
+- Electron services own network access and settings persistence
+- the React renderer only talks to the preload bridge
 
-That avoids leaking secrets and keeps the client runtime small and predictable.
+That keeps the renderer simple and avoids exposing Node APIs directly to the page.
 
 ## Error Handling Model
 
 - upstream fetch helpers retry transient errors
-- the browser retries `/api/logs` and `/api/log`
+- the renderer retries preload-backed log requests
 - failed individual logs do not erase successful results
 - a failed full log-list fetch is still fatal because the scan cannot continue without the list
 
